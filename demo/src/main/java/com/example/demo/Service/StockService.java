@@ -44,9 +44,6 @@ public class StockService {
         this.singleSubscribedSymbol = symbol.toUpperCase();
     }
 
-    public void clearSingleStockSubscription() {
-        this.singleSubscribedSymbol = null;
-    }
 
     private void updatePrices() {
 
