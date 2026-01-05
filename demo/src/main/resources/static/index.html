@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Stock Prices</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 60%;
+            margin-top: 15px;
+            display: none; /* 🔥 hidden initially */
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+        }
+        #error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>Live Stock Prices</h2>
+
+<input type="text" id="symbol" placeholder="Enter stock symbol (AAPL)">
+<button onclick="subscribeSingle()">See Single Stock</button>
+<button onclick="showAll()">Show All Stocks</button>
+
+<div id="error"></div>
+
+<table id="stockTable">
+    <thead>
+    <tr>
+        <th>Symbol</th>
+        <th>Name</th>
+        <th>Price</th>
+    </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+</table>
+
+<script>
+    let stompClient = null;
+    let connected = false;
+
+    let allSubscription = null;
+    let singleSubscription = null;
+
+    function connectIfNeeded(callback) {
+        if (connected) {
+            callback();
+            return;
+        }
+
+        const socket = new SockJS('/prices');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function () {
+            connected = true;
+            callback();
+        });
+    }
+
+    function showAll() {
+        document.getElementById("error").innerText = "";
+        document.getElementById("stockTable").style.display = "table";
+
+        connectIfNeeded(() => {
+
+            if (singleSubscription) {
+                singleSubscription.unsubscribe();
+                singleSubscription = null;
+            }
+
+            clearTable();
+
+            if (!allSubscription) {
+                allSubscription = stompClient.subscribe('/topic/prices', function (msg) {
+                    renderAllStocks(JSON.parse(msg.body));
+                });
+            }
+        });
+    }
+
+    function subscribeSingle() {
+    const symbol = document.getElementById("symbol").value.trim().toUpperCase();
+
+    if (!symbol) {
+        document.getElementById("error").innerText = "Enter a stock symbol";
+        return;
+    }
+
+    document.getElementById("error").innerText = "";
+    document.getElementById("stockTable").style.display = "table";
+
+    connectIfNeeded(() => {
+
+        if (allSubscription) {
+            allSubscription.unsubscribe();
+            allSubscription = null;
+        }
+
+        clearTable();
+
+        if (singleSubscription) {
+            singleSubscription.unsubscribe();
+        }
+
+        let receivedFirstMessage = false;
+
+        singleSubscription = stompClient.subscribe('/topic/single', function (msg) {
+            receivedFirstMessage = true;
+            renderSingleStock(JSON.parse(msg.body));
+        });
+
+        stompClient.send('/app/single-stock', {}, symbol);
+
+        setTimeout(() => {
+            if (!receivedFirstMessage) {
+                singleSubscription.unsubscribe();
+                singleSubscription = null;
+
+                clearTable();
+                document.getElementById("stockTable").style.display = "none";
+
+                document.getElementById("error").innerText =
+                    "Please enter a valid stock symbol by checking 'Show All Stocks'";
+            }
+        }, 1000);
+    });
+}
+
+
+    function renderAllStocks(stocks) {
+        const body = document.getElementById("tableBody");
+        body.innerHTML = "";
+
+        stocks.forEach(s => {
+            body.innerHTML += `
+                <tr>
+                    <td>${s.symbol}</td>
+                    <td>${s.name}</td>
+                    <td>${s.price}</td>
+                </tr>`;
+        });
+    }
+
+    function renderSingleStock(stock) {
+        const body = document.getElementById("tableBody");
+
+        body.innerHTML = `
+            <tr>
+                <td>${stock.symbol}</td>
+                <td>${stock.name}</td>
+                <td>${stock.price}</td>
+            </tr>`;
+    }
+
+    function clearTable() {
+        document.getElementById("tableBody").innerHTML = "";
+    }
+</script>
+
+</body>
+</html>
