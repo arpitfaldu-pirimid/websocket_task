@@ -1,7 +1,7 @@
-package com.example.demo.Service;
+package com.example.demo.service;
 
-import com.example.demo.Repository.StockRepository;
-import com.example.demo.model.Stock;
+import com.example.demo.repository.StockRepository;
+import com.example.demo.entity.Stock;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
@@ -48,6 +48,7 @@ public class StockService {
     private void updatePrices() {
 
         List<Stock> stocks = stockRepository.findAll();
+
 
         for (Stock stock : stocks) {
             double change = (random.nextDouble() * 2 - 1) * 0.5;

@@ -11,7 +11,7 @@
             border-collapse: collapse;
             width: 60%;
             margin-top: 15px;
-            display: none; /* 🔥 hidden initially */
+            display: none;
         }
         th, td {
             border: 1px solid black;
@@ -30,8 +30,8 @@
 <h2>Live Stock Prices</h2>
 
 <input type="text" id="symbol" placeholder="Enter stock symbol (AAPL)">
-<button onclick="subscribeSingle()">See Single Stock</button>
 <button onclick="showAll()">Show All Stocks</button>
+<button onclick="subscribeSingle()">See Single Stock</button>
 
 <div id="error"></div>
 
@@ -47,12 +47,17 @@
 </table>
 
 <script>
+    const params = new URLSearchParams(window.location.search);
+    const jwtToken = params.get("token");
+
+    if (!jwtToken) {
+        alert("Not authenticated. Redirecting to Google login.");
+        window.location.href = "/oauth2/authorization/google";
+    }
     let stompClient = null;
     let connected = false;
-
     let allSubscription = null;
     let singleSubscription = null;
-
     function connectIfNeeded(callback) {
         if (connected) {
             callback();
@@ -62,10 +67,18 @@
         const socket = new SockJS('/prices');
         stompClient = Stomp.over(socket);
 
-        stompClient.connect({}, function () {
-            connected = true;
-            callback();
-        });
+        stompClient.connect(
+            { Authorization: "Bearer " + jwtToken },
+            function () {
+                connected = true;
+                callback();
+            },
+            function (error) {
+                console.error("WebSocket connection failed:", error);
+                document.getElementById("error").innerText =
+                    "Connection failed. Your token may be invalid or expired.";
+            }
+        );
     }
 
     function showAll() {
@@ -90,53 +103,52 @@
     }
 
     function subscribeSingle() {
-    const symbol = document.getElementById("symbol").value.trim().toUpperCase();
+        const symbol = document.getElementById("symbol").value.trim().toUpperCase();
 
-    if (!symbol) {
-        document.getElementById("error").innerText = "Enter a stock symbol";
-        return;
-    }
-
-    document.getElementById("error").innerText = "";
-    document.getElementById("stockTable").style.display = "table";
-
-    connectIfNeeded(() => {
-
-        if (allSubscription) {
-            allSubscription.unsubscribe();
-            allSubscription = null;
+        if (!symbol) {
+            document.getElementById("error").innerText = "Enter a stock symbol";
+            return;
         }
 
-        clearTable();
+        document.getElementById("error").innerText = "";
+        document.getElementById("stockTable").style.display = "table";
 
-        if (singleSubscription) {
-            singleSubscription.unsubscribe();
-        }
+        connectIfNeeded(() => {
 
-        let receivedFirstMessage = false;
-
-        singleSubscription = stompClient.subscribe('/topic/single', function (msg) {
-            receivedFirstMessage = true;
-            renderSingleStock(JSON.parse(msg.body));
-        });
-
-        stompClient.send('/app/single-stock', {}, symbol);
-
-        setTimeout(() => {
-            if (!receivedFirstMessage) {
-                singleSubscription.unsubscribe();
-                singleSubscription = null;
-
-                clearTable();
-                document.getElementById("stockTable").style.display = "none";
-
-                document.getElementById("error").innerText =
-                    "Please enter a valid stock symbol by checking 'Show All Stocks'";
+            if (allSubscription) {
+                allSubscription.unsubscribe();
+                allSubscription = null;
             }
-        }, 1000);
-    });
-}
 
+            clearTable();
+
+            if (singleSubscription) {
+                singleSubscription.unsubscribe();
+            }
+
+            let receivedFirstMessage = false;
+
+            singleSubscription = stompClient.subscribe('/topic/single', function (msg) {
+                receivedFirstMessage = true;
+                renderSingleStock(JSON.parse(msg.body));
+            });
+
+            stompClient.send('/app/single-stock', {}, symbol);
+
+            setTimeout(() => {
+                if (!receivedFirstMessage) {
+                    singleSubscription.unsubscribe();
+                    singleSubscription = null;
+
+                    clearTable();
+                    document.getElementById("stockTable").style.display = "none";
+
+                    document.getElementById("error").innerText =
+                        "Invalid symbol. Click 'Show All Stocks' to see valid symbols.";
+                }
+            }, 1000);
+        });
+    }
 
     function renderAllStocks(stocks) {
         const body = document.getElementById("tableBody");
